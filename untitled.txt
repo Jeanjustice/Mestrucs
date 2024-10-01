@@ -1,3 +1,0 @@
-git add secondtestnb.ipynb
-git commit -m "Ajout du notebook pour le script graphique"
-git push origin master

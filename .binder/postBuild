@@ -1,0 +1,3 @@
+# postBuild
+chmod +x .binder/start.sh
+./.binder/start.sh
