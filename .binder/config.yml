@@ -1,5 +1,0 @@
-name: mybinder
-dependencies:
-  - python=3.8
-  - pip:
-      - streamlit
