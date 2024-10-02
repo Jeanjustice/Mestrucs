@@ -72,19 +72,16 @@ def generate_traffic_data(tracked_number, num_interlocutors=6, num_events=100):
 
 def create_csv(tracked_number, data):
     """Crée un fichier CSV à partir des données."""
-    header = [f"Suivi de {convert_to_international_format(tracked_number)}"]
-    
-    # Créer un DataFrame
+    # Créer un DataFrame avec les en-têtes corrects
     df = pd.DataFrame(data, columns=["Type de données", "Date", "Appelant", "Appelé", "IMSI", "IMEI"])
-    
-    # Déplacer toutes les cellules vers le bas en ajoutant une ligne vide
-    empty_row = pd.DataFrame([[""] * df.shape[1]], columns=df.columns)
-    df = pd.concat([empty_row, df], ignore_index=True)
 
-    # Créer le CSV dans un buffer
-    csv_buffer = df.to_csv(index=False, header=False)
+    # Générer le nom du fichier avec le numéro suivi
+    file_name = f"Suivi_du_numero_{convert_to_international_format(tracked_number)}.csv"
     
-    return header, csv_buffer
+    # Créer le CSV dans un buffer
+    csv_buffer = df.to_csv(index=False)
+    
+    return file_name, csv_buffer
 
 # Configuration de l'application Streamlit
 st.title("Générateur de Trafic Télécom")
@@ -93,8 +90,8 @@ if st.button("Générer un trafic télécom"):
     tracked_number = generate_phone_number()
     traffic_data = generate_traffic_data(tracked_number)
 
-    # Créer le CSV
-    header, csv_buffer = create_csv(tracked_number, traffic_data)
+    # Créer le CSV avec un nom de fichier dynamique
+    file_name, csv_buffer = create_csv(tracked_number, traffic_data)
 
     # Afficher le numéro suivi en gras
     st.markdown(f"### Suivi de : **{convert_to_international_format(tracked_number)}**")
@@ -106,6 +103,6 @@ if st.button("Générer un trafic télécom"):
     st.download_button(
         label="Télécharger le fichier CSV",
         data=csv_buffer,
-        file_name='traffic_data.csv',
+        file_name=file_name,
         mime='text/csv'
     )

@@ -1,82 +1,63 @@
 import streamlit as st
 import pandas as pd
 
-def clean_column_names(df):
-    """Nettoie les noms des colonnes en supprimant les espaces et les accents."""
-    df.columns = df.columns.str.strip().str.replace(' ', '_').str.normalize('NFD').str.encode('ascii', errors='ignore').str.decode('utf-8')
-    return df
+def analyze_contacts(file):
+    # Lire le fichier CSV
+    df = pd.read_csv(file)
 
-def process_contact_list(csv_file):
-    # Lire le fichier CSV et nettoyer les noms des colonnes
-    df = pd.read_csv(csv_file)
-    df = clean_column_names(df)
+    # Identification du numéro suivi (première entrée dans la colonne "Appelant")
+    numero_suivi = df["Appelant"].iloc[0]
 
-    # Vérifier que les colonnes nécessaires existent
-    required_columns = ['Type_de_donnees', 'Appelant', 'Appele', 'IMSI', 'IMEI']
-    if not all(col in df.columns for col in required_columns):
-        st.error("Le fichier CSV ne contient pas les colonnes requises.")
-        return
+    # Extraire l'IMSI et l'IMEI du numéro suivi, suppression des NaN et conversion en string sans décimales
+    imsi = df.loc[df["Appelant"] == numero_suivi, "IMSI"].dropna().unique()
+    imei = df.loc[df["Appelant"] == numero_suivi, "IMEI"].dropna().unique()
+    imsi = [str(int(imsi[0]))] if len(imsi) > 0 else ["Non disponible"]
+    imei = [str(int(imei[0]))] if len(imei) > 0 else ["Non disponible"]
 
-    # Extraire le numéro suivi
-    tracked_number = df['Appelant'].iloc[0] if df['Appelant'].iloc[0].startswith('33') else df['Appele'].iloc[0]
+    # Compter les occurrences pour chaque contact et les types de données
+    contact_count = df.groupby(["Appelant", "Type de données"]).size().unstack(fill_value=0) + \
+                    df.groupby(["Appelé", "Type de données"]).size().unstack(fill_value=0)
+    contact_count = contact_count.fillna(0).astype(int)
 
-    # Extraire l'IMSI et l'IMEI du numéro suivi
-    imsi = df.loc[df['Appelant'] == tracked_number, 'IMSI'].dropna().unique()
-    imei = df.loc[df['Appelant'] == tracked_number, 'IMEI'].dropna().unique()
-    
-    imsi = imsi[0] if len(imsi) > 0 else "IMSI non disponible"
-    imei = imei[0] if len(imei) > 0 else "IMEI non disponible"
+    # Construire la liste des contacts avec comptage par type de données
+    contact_list = []
+    for contact, row in contact_count.iterrows():
+        sms_count = row.get('SMS', 0)
+        call_count = row.get('CALL', 0)
+        mms_count = row.get('MMS', 0)
+        counts = []
+        if sms_count > 0:
+            counts.append(f"{sms_count} SMS")
+        if call_count > 0:
+            counts.append(f"{call_count} CALL")
+        if mms_count > 0:
+            counts.append(f"{mms_count} MMS")
+        contact_list.append(f"{contact} ({', '.join(counts)})")
 
-    # Remplir la section "Total des échanges"
-    total_exchanges = df[(df['Appelant'] == tracked_number) | (df['Appele'] == tracked_number)]
-    total_count = len(total_exchanges)
-    
-    total_sms = len(total_exchanges[total_exchanges['Type_de_donnees'] == 'SMS'])
-    total_call = len(total_exchanges[total_exchanges['Type_de_donnees'] == 'CALL'])
-    total_mms = len(total_exchanges[total_exchanges['Type_de_donnees'] == 'MMS'])
+    # Afficher les résultats dans l'application Streamlit
+    st.write(f"Liste de contacts pour le numéro suivi : {numero_suivi}")
+    st.write(f"IMSI : {imsi[0]}")
+    st.write(f"IMEI : {imei[0]}")
+    st.write("Contacts :")
+    for contact in contact_list:
+        st.write(contact)
 
-    # Création du dictionnaire de contacts
-    contacts = {}
-    for index, row in df.iterrows():
-        if row['Appelant'] == tracked_number:
-            contact_number = row['Appele']
-        elif row['Appele'] == tracked_number:
-            contact_number = row['Appelant']
-        else:
-            continue
+    # Télécharger la liste de contacts au format texte
+    contacts_txt = f"Liste de contacts pour le numéro suivi : {numero_suivi}\n\n"
+    contacts_txt += f"IMSI : {imsi[0]}\n"
+    contacts_txt += f"IMEI : {imei[0]}\n\n"
+    contacts_txt += "Contacts :\n" + "\n".join(contact_list)
 
-        if contact_number not in contacts:
-            contacts[contact_number] = {'count': 0, 'SMS': 0, 'CALL': 0, 'MMS': 0}
-
-        contacts[contact_number]['count'] += 1
-        contacts[contact_number][row['Type_de_donnees']] += 1
-
-    # Générer la sortie textuelle
-    result = f"Liste de contacts pour le numéro suivi : {tracked_number}\n\n"
-    result += f"IMSI : {int(imsi)}\nIMEI : {int(imei)}\n\n"
-    result += f"Total des échanges : {total_count} ( {total_sms} SMS, {total_call} CALL, {total_mms} MMS )\n\n"
-    result += "Contacts :\n"
-
-    for contact, details in contacts.items():
-        result += f"{contact} ({details['count']} fois : {details['SMS']} SMS, {details['CALL']} CALL, {details['MMS']} MMS)\n"
-
-    return result
-
-# Application Streamlit
-st.title("Analyseur de liste de contacts")
-
-uploaded_file = st.file_uploader("Choisir un fichier CSV", type="csv")
-
-if uploaded_file is not None:
-    contact_list_text = process_contact_list(uploaded_file)
-
-    # Afficher la liste des contacts analysée
-    st.text_area("Résultats de l'analyse", value=contact_list_text, height=300)
-
-    # Option de téléchargement du fichier texte
     st.download_button(
-        label="Télécharger la liste de contacts",
-        data=contact_list_text,
-        file_name='contact_list.txt',
+        label="Télécharger la liste de contacts (.txt)",
+        data=contacts_txt,
+        file_name='contacts_list.txt',
         mime='text/plain'
     )
+
+# Interface de l'application Streamlit
+st.title("Analyseur de Liste de Contacts")
+
+uploaded_file = st.file_uploader("Choisir un fichier CSV", type="csv")
+if uploaded_file is not None:
+    analyze_contacts(uploaded_file)
